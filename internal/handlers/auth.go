@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"github.com/cevrimxe/OAuth-Service/internal/models"
 	"github.com/cevrimxe/OAuth-Service/internal/oauth"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // Handler holds dependencies for HTTP handlers
@@ -218,7 +221,7 @@ func (h *Handler) AppleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user info from ID token
-	appleUser, err := h.Apple.GetUserFromIDToken(tokenResp.IDToken)
+	appleUser, err := h.Apple.GetUserFromIDToken(ctx, tokenResp.IDToken)
 	if err != nil {
 		log.Printf("Failed to get user info: %v", err)
 		sendError(w, http.StatusInternalServerError, "failed to get user info")
@@ -297,7 +300,11 @@ func (h *Handler) findOrCreateUser(ctx context.Context, provider, providerID, em
 
 // GetUser returns the current user info
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(contextKey("user_id")).(string)
+	userID, ok := r.Context().Value(contextKey("user_id")).(string)
+	if !ok || userID == "" {
+		sendError(w, http.StatusUnauthorized, "invalid user context")
+		return
+	}
 
 	user, err := h.DB.GetUserByID(r.Context(), userID)
 	if err != nil {
@@ -308,7 +315,12 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(w, user)
 }
 
-// generateState generates a random state for OAuth
+// generateState generates a cryptographically secure random state for OAuth
 func generateState() string {
-	return time.Now().Format("20060102150405")
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to UUID if crypto/rand fails
+		return uuid.New().String()
+	}
+	return base64.URLEncoding.EncodeToString(b)
 }

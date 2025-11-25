@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -33,5 +34,21 @@ func TestGenerateState(t *testing.T) {
 	state := generateState()
 	if state == "" {
 		t.Error("expected non-empty state")
+	}
+
+	// Verify it's base64url encoded and has reasonable length
+	decoded, err := base64.URLEncoding.DecodeString(state)
+	if err != nil {
+		t.Errorf("expected valid base64url encoded state, got error: %v", err)
+	}
+
+	if len(decoded) < 16 {
+		t.Error("expected state to be at least 16 bytes when decoded")
+	}
+
+	// Verify uniqueness
+	state2 := generateState()
+	if state == state2 {
+		t.Error("expected different states to be generated")
 	}
 }
